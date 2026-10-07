@@ -1,0 +1,27 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "area": "Chennai",
+    "source": "SEED — verified pilot-corridor junctions (config.yaml, snapped to the hospital registry) + traffic signals observed on live routes by the running system (OpenStreetMap highway=traffic_signals).",
+    "note": "This is a small verified seed so the offline fallback works out of the box. Run tools/build_signals_dataset.py (where there is internet) to expand this to the full, cross-checked Chennai traffic-signal set.",
+    "crs": "WGS84 (lat/lng)",
+    "count": 7,
+    "generated": "2026-07-10"
+  },
+  "features": [
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.2775787, 13.0814162] },
+      "properties": { "name": "MMC / RGGGH junction", "ref": "J1", "source": "config", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.2607000, 13.0836000] },
+      "properties": { "name": "Vepery junction", "ref": "J2", "source": "config", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.2438901, 13.0783427] },
+      "properties": { "name": "Kilpauk MC junction", "ref": "J3", "source": "config", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.26278, 13.08030] },
+      "properties": { "name": "signal", "source": "osm_observed", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.25879, 13.07932] },
+      "properties": { "name": "signal", "source": "osm_observed", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.25680, 13.07911] },
+      "properties": { "name": "signal", "source": "osm_observed", "controller": false } },
+    { "type": "Feature", "geometry": { "type": "Point", "coordinates": [80.25823, 13.07548] },
+      "properties": { "name": "signal", "source": "osm_observed", "controller": false } }
+  ]
+}

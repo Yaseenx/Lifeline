@@ -1,0 +1,236 @@
+<!doctype html><html><head><meta charset="utf-8"><title>LifeLine — corridor monitoring</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;background:#0b1622;color:#eaf1f8;margin:0;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #21364a}
+h1{font-size:16px;margin:0}
+.badge{font-size:11px;padding:2px 8px;border-radius:7px;background:#18324d}
+.off{background:#5a1717;color:#ffb4b4;font-weight:700}
+button{background:#0e1d2c;color:#eaf1f8;border:1px solid #21364a;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:12px}
+button:hover{border-color:#2e6cff}
+button.red{border-color:#e23b3b;color:#ffb4b4} button.blue{border-color:#1f6fe0;color:#bcd4ee}
+main{flex:1;display:flex;min-height:0}
+#map{flex:1.4;min-width:0}
+aside{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px;max-width:430px}
+.card{background:#101c2a;border:1px solid #21364a;border-radius:12px;padding:10px 12px}
+.card h2{font-size:12px;margin:0 0 6px;color:#9fb2c4;text-transform:uppercase;letter-spacing:.4px}
+.jrow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #16283a;font-size:13px}
+.lamp{width:12px;height:12px;border-radius:50%;background:#333;display:inline-block}
+.lamp.green{background:#1faa59}.lamp.amber{background:#e8a33d}.lamp.red{background:#e23b3b}
+.lamp.flash{background:#e23b3b;animation:fl .6s infinite}
+@keyframes fl{50%{opacity:.2}}
+.mode{font-size:11px;color:#9fb2c4}.mode.FAULT{color:#ff8a8a;font-weight:700}
+.own{font-size:11px;color:#7ee2a8}
+.amb-row{font-size:12px;padding:5px 0;border-top:1px solid #16283a}
+.chip{font-size:10px;padding:1px 6px;border-radius:6px;margin-left:4px}
+.chip.granted{background:rgba(31,170,89,.2);color:#7ee2a8}
+.chip.requested{background:rgba(232,163,61,.2);color:#ffd28a}
+.chip.queued{background:#18324d;color:#9fb2c4}
+.chip.passed{background:#16283a;color:#5a6b7d}
+.chip.rejected{background:rgba(226,59,59,.2);color:#ffb4b4}
+.conflict{background:rgba(232,163,61,.1);border:1px solid #e8a33d;border-radius:10px;padding:8px 10px;font-size:12px;color:#ffd28a;margin-top:6px}
+#log{font-family:ui-monospace,monospace;font-size:10.5px;color:#9fb2c4;background:#0e1d2c;border-radius:8px;padding:8px;height:140px;overflow:auto;white-space:pre}
+.legend{font-size:10.5px;color:#9fb2c4}
+.leaflet-tile{filter:invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9)}
+.warnbar{background:#5a1717;color:#ffd7d7;font-size:12px;padding:6px 12px;display:none}
+</style></head><body>
+<header>
+  <h1>LifeLine corridor monitoring</h1><span id="status" class="badge">connecting…</span>
+  <span style="flex:1"></span>
+  <a href="/console" target="_blank" style="text-decoration:none"><button class="blue">Call-taker console →</button></a>
+  <button onclick="send({type:'kill_server'})">Kill server</button>
+  <button onclick="send({type:'restore'})">Restore</button>
+</header>
+<div id="warn" class="warnbar"></div>
+<main>
+  <div id="map"></div>
+  <aside>
+    <div class="card"><h2>Signals on active route</h2><div id="junctions"></div><div id="conflicts"></div></div>
+    <div class="card"><h2>Ambulances en route</h2><div id="ambs">—</div></div>
+    <div class="card"><h2>Activity</h2><div id="log"></div>
+      <div class="legend">blue line = road route · green dot = signal cleared (green wave) · amber = requested ahead · grey = signal on route · green ring = controlled junction (real hardware) · faint dot = mapped signal (awaiting controller box) · trail = path history</div></div>
+  </aside>
+</main>
+<script>
+"use strict";
+const map = L.map('map',{zoomControl:true}).setView([13.081, 80.260], 13);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {attribution:'&copy; OpenStreetMap', maxZoom: 19}).addTo(map);
+let fitted=false, fittedRoute=false, ws;
+const jMarkers={}, aMarkers={}, trails={}, trailTrip={}, trailLines={}, routeLayers={};
+
+// A unit only has a usable position when it has a GPS fix (never (0,0)/null island).
+function hasFix(a){ return a.has_fix!==false && !(Math.abs(a.lat)<1e-6 && Math.abs(a.lng)<1e-6); }
+function clearRoute(id){ if(routeLayers[id]){ routeLayers[id].layers.forEach(l=>map.removeLayer(l)); delete routeLayers[id]; } }
+
+// Junction colour = green-wave state (server-authoritative): granted (green),
+// requested (amber), fault (flash red), else idle (grey).
+function jColor(j){
+  if(j.mode==='FAULT') return '#ff5a5a';
+  if(j.owner && j.mode==='HOLD') return '#1faa59';
+  if(j.owner) return '#e8a33d';
+  return '#5a6b7d';
+}
+
+function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+function connect(){
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+  ws.onopen=()=>document.getElementById('status').textContent='live';
+  ws.onclose=()=>{document.getElementById('status').textContent='reconnecting…';setTimeout(connect,1500)};
+  ws.onerror=()=>{ try{ ws.close(); }catch(_){} };
+  ws.onmessage=(ev)=>{ let s; try{ s=JSON.parse(ev.data); }catch(_){ return; } try{ render(s); }catch(err){ console.warn('[ops] render error:', err); } };
+}
+
+// PLACEHOLDER SIGNALS — every mapped signal from the local dataset (GET /signals).
+// A faint dot = a signal with no controller box installed yet; a green ring = a
+// controller is installed there. Loaded once at startup, beneath the live layers.
+// When a real box goes in, mark that signal controller:true (or drop it) and it
+// stops showing as a placeholder.
+const sigLayer=[];
+function loadSignals(){
+  fetch('/signals').then(r=>r.json()).then(d=>{
+    (d.signals||[]).forEach(s=>{
+      if(typeof s.lat!=='number' || typeof s.lng!=='number') return;
+      const on=!!s.controller;
+      L.circleMarker([s.lat,s.lng],{
+        radius:on?7:4, weight:on?3:1,
+        color:on?'#1faa59':'#33475b',
+        fillColor:on?'#0e1116':'#6b7b8c', fillOpacity:on?0.15:0.75
+      }).addTo(map).bindTooltip((s.name||'signal')+(on?' · controller installed':' · signal (no controller box yet)'),{direction:'top'});
+      sigLayer.push(1);
+    });
+    console.log('[ops] plotted '+sigLayer.length+' mapped signal(s)');
+  }).catch(()=>{});
+}
+loadSignals();
+
+function render(s){
+  if(!s || !Array.isArray(s.junctions) || !Array.isArray(s.ambulances)) return;
+  const st=document.getElementById('status');
+  st.className='badge'+(s.online?'':' off');
+  st.textContent=s.online?('ONLINE · tick '+s.tick):'OFFLINE — kill-switch active (leases expiring)';
+
+  const warn=document.getElementById('warn');
+  if(s.junctions.length && s.junctions[0].lat==null){
+    warn.style.display='block';
+    warn.textContent='Server is running an older build (no junction coordinates in snapshot) — restart it: stop uvicorn, then uvicorn app:app --port 4000';
+  } else { warn.style.display='none'; }
+
+  // JUNCTION MARKERS — only shown when ON AN ACTIVE ROUTE. A controller (J1/J2/J3)
+  // that no trip is using is hidden; route signals + engaged controllers show.
+  const engaged=new Set(); s.ambulances.forEach(a=>Object.keys(a.engage||{}).forEach(id=>engaged.add(id)));
+  const onRoute=j=> !!(j.virtual || j.owner || engaged.has(j.id));
+  const seenJ=new Set();
+  s.junctions.forEach(j=>{
+    if(j.lat==null||j.lng==null||!onRoute(j)) return;
+    seenJ.add(j.id);
+    const ctrl=!!j.controlled, col=jColor(j), r=ctrl?10:5;
+    if(!jMarkers[j.id]){
+      jMarkers[j.id]=L.circleMarker([j.lat,j.lng],{radius:r,weight:ctrl?3:1}).addTo(map);
+      jMarkers[j.id].bindTooltip(ctrl?j.id:'signal on route',{permanent:ctrl,direction:'top',offset:[0,-12]});
+    }
+    jMarkers[j.id].setRadius(r).setStyle({color:ctrl?'#fff':'#0e1116',fillColor:col,
+      fillOpacity:j.owner?0.95:(ctrl?0.5:0.85),weight:ctrl?3:1});
+    if(ctrl) jMarkers[j.id].setTooltipContent(`${j.id} ${j.mode==='FAULT'?'⚠':''}${j.owner?('· '+j.owner):''}`);
+  });
+  Object.keys(jMarkers).forEach(id=>{ if(!seenJ.has(id)){ map.removeLayer(jMarkers[id]); delete jMarkers[id]; }});
+
+  // AMBULANCE MARKERS + trails
+  const seen=new Set();
+  s.ambulances.forEach(a=>{
+    if(a.lat==null||a.lng==null||!hasFix(a)) return;
+    seen.add(a.id);
+    const col=a.cls==='code_red'?'#e23b3b':'#1f6fe0';
+    if(!aMarkers[a.id]){
+      aMarkers[a.id]=L.circleMarker([a.lat,a.lng],{radius:7,weight:2,color:'#fff'}).addTo(map)
+        .bindTooltip(a.id,{permanent:true,direction:'right',offset:[8,0]});
+      trails[a.id]=[]; trailTrip[a.id]=a.trip_id;
+      trailLines[a.id]=L.polyline([],{color:col,weight:2,opacity:0.5}).addTo(map);
+    }
+    if(trailTrip[a.id]!==a.trip_id){ trailTrip[a.id]=a.trip_id; trails[a.id].length=0; }
+    aMarkers[a.id].setLatLng([a.lat,a.lng]).setStyle({fillColor:col,fillOpacity:a.active?0.95:0.4});
+    const tr=trails[a.id]; const last=tr[tr.length-1];
+    if(!last||last[0]!==a.lat||last[1]!==a.lng){ tr.push([a.lat,a.lng]); if(tr.length>80)tr.shift(); trailLines[a.id].setLatLngs(tr); }
+  });
+  Object.keys(aMarkers).forEach(id=>{ if(!seen.has(id)){ map.removeLayer(aMarkers[id]); map.removeLayer(trailLines[id]); delete aMarkers[id]; delete trailLines[id]; delete trails[id]; delete trailTrip[id]; delete routeLayers[id]; }});
+
+  // ROUTE LINE — the server's road path to the hospital (rebuilt only when it changes).
+  const activeR=new Set();
+  s.ambulances.forEach(a=>{
+    if(!a.active || !hasFix(a)) return;
+    const tgt=a.target||a.dest;   // accident on leg 1, hospital on leg 2
+    let line=null;
+    if(Array.isArray(a.route) && a.route.length>1) line=a.route.map(p=>[p.lat,p.lng]);
+    else if(tgt && tgt.lat!=null) line=[[a.lat,a.lng],[tgt.lat,tgt.lng]];
+    if(!line) return;
+    activeR.add(a.id);
+    const key=(a.route?('R'+a.route.length):'S')+'|'+(tgt?(tgt.kind+tgt.lat+','+tgt.lng):'');
+    if(routeLayers[a.id] && routeLayers[a.id].key===key) return;
+    clearRoute(a.id);
+    const col=a.cls==='code_red'?'#e23b3b':'#1f6fe0';
+    const layers=[L.polyline(line,{color:col,weight:4,opacity:.6}).addTo(map)];
+    if(tgt && tgt.lat!=null){
+      const scene=tgt.kind==='scene', mcol=scene?'#f5a623':'#e23b3b', ml=scene?'A':'H';
+      layers.push(L.marker([tgt.lat,tgt.lng],{icon:L.divIcon({className:'',iconSize:[22,22],
+        html:`<div style="width:22px;height:22px;border-radius:50%;background:${mcol};color:#fff;font:700 13px system-ui;display:flex;align-items:center;justify-content:center;border:2px solid #fff">${ml}</div>`})})
+        .addTo(map).bindTooltip(`${a.id} → ${scene?'accident scene':(tgt.name||'destination')}`,{direction:'top',offset:[0,-12]}));
+    }
+    routeLayers[a.id]={layers,key};
+  });
+  Object.keys(routeLayers).forEach(id=>{ if(!activeR.has(id)) clearRoute(id); });
+
+  // FIT — once to the controllers, then once to the first active route.
+  if(!fitted){
+    const cj=s.junctions.filter(j=>j.controlled&&j.lat!=null);
+    if(cj.length){ map.fitBounds(L.latLngBounds(cj.map(j=>[j.lat,j.lng])).pad(0.4)); fitted=true; }
+  }
+  if(!fittedRoute){
+    const act=s.ambulances.find(a=>a.active&&a.dest&&a.dest.lat!=null&&hasFix(a));
+    if(act){
+      const pts=s.junctions.filter(j=>j.controlled&&j.lat!=null).map(j=>[j.lat,j.lng]);
+      pts.push([act.lat,act.lng],[act.dest.lat,act.dest.lng]);
+      map.fitBounds(L.latLngBounds(pts).pad(0.25)); fittedRoute=true;
+    }
+  }
+
+  // JUNCTIONS PANEL — controllers in detail + a count of live route signals.
+  const shownJ=s.junctions.filter(j=>onRoute(j));
+  const idleCtrl=s.junctions.filter(j=>j.controlled && !onRoute(j)).length;
+  document.getElementById('junctions').innerHTML=(shownJ.length?shownJ.map(j=>`
+    <div class="jrow">
+      <b style="width:64px">${j.controlled?j.id:'signal'}</b>
+      NS <span class="lamp ${(j.lamps||{}).ns||''}"></span> EW <span class="lamp ${(j.lamps||{}).ew||''}"></span>
+      <span class="mode ${j.mode}">${j.mode}${j.fault?' — '+j.fault:''}</span>
+      ${j.eta_green_s!=null?(j.eta_green_s===0?'<span class="own">🟢 green now</span>':`<span class="chip requested">🟢 in ${Math.ceil(j.eta_green_s)}s</span>`):''}
+      ${j.owner?`<span class="own">${j.owner} · ${j.ttl_ms}ms</span>`:''}
+      ${(j.queue||[]).length?`<span class="mode">q: ${(j.queue||[]).join(',')}</span>`:''}
+      ${j.mode==='FAULT'?`<button onclick="send({type:'monitor_reset',junction:'${j.id}'})">reset</button>`:''}
+    </div>`).join(''):`<div class="jrow"><span class="mode">No junctions on the active route yet</span></div>`)
+    + (idleCtrl?`<div class="jrow"><span class="mode">${idleCtrl} controller(s) installed · idle (off-route)</span></div>`:'');
+
+  const conflicts=s.junctions.filter(j=>(j.queue||[]).length);
+  document.getElementById('conflicts').innerHTML=conflicts.map(j=>
+    `<div class="conflict">⚠ Contention @${j.controlled?j.id:'signal'}: ${j.owner} holds · waiting: ${(j.queue||[]).join(', ')}</div>`).join('');
+
+  // AMBULANCES PANEL — summarise the wave as counts, not 30 chips.
+  document.getElementById('ambs').innerHTML=s.ambulances.map(a=>{
+    const eng=Object.values(a.engage||{});
+    const g=eng.filter(x=>x==='granted').length, q=eng.filter(x=>x==='requested'||x==='queued').length;
+    return `<div class="amb-row"><b>${a.id}</b> · ${a.cls==='code_red'?'🔴 RED':'🔵 BLUE'} · ${a.speed_kph} km/h
+      <span class="chip ${a.active?'granted':'queued'}">${a.active?'on trip':'available'}</span>
+      ${a.trip_type&&a.trip_type!=='SCENE'?`<span class="chip queued">${a.trip_type}${a.trip_type==='HOUSE_CALL'?' · leg '+a.leg:''}</span>`:''}
+      ${a.stale?'<span class="chip rejected">stale</span>':''}
+      ${a.target&&a.target.kind==='scene'
+          ? `<br><span class="own">→ responding to accident${a.dest&&a.dest.name?` · then ${a.dest.name}`:''}</span>`
+          : (a.dest&&a.dest.name?`<br><span class="own">→ ${a.dest.name}</span>`:'')}
+      ${a.dest_eta_sec!=null?`<br><span class="own">ETA ${Math.max(1,Math.round(a.dest_eta_sec/60))} min${a.dest_distance_m!=null?` · ${(a.dest_distance_m/1000).toFixed(1)} km`:''}</span>`:''}
+      <br>${(g||q)?`<span class="chip granted">${g} cleared</span><span class="chip requested">${q} ahead</span>`:'<span class="mode">no signals engaged</span>'}
+    </div>`;
+  }).join('')||'—';
+
+  document.getElementById('log').textContent=(s.log||[]).map(l=>
+    `${(l.ts||0).toFixed(1).padStart(7)}  ${String(l.kind||'').padEnd(14)} ${l.who||''} ${l.junction||''} ${l.extra||''}`).reverse().join('\n');
+}
+connect();
+</script></body></html>

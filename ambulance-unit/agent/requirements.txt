@@ -1,0 +1,9 @@
+# Core (needed in every mode)
+python-socketio[asyncio_client]>=5.11
+aiohttp>=3.9
+websockets>=12.0
+python-dotenv>=1.0
+
+# Serial GPS mode only (NEO-M8N). Not needed for GPS_MODE=sim.
+pyserial>=3.5
+pynmea2>=1.19

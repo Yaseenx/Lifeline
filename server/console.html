@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LifeLine — Call-taker Console</title>
+<style>
+  :root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232d;--line:#2b3543;--ink:#e6edf3;
+    --dim:#8b98a5;--red:#e5484d;--amber:#f5a623;--green:#2ecc71;--blue:#4c7ef3;--accent:#3fb950;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:12px;align-items:center}
+  header h1{font-size:17px;margin:0;font-weight:650}
+  header .sub{color:var(--dim);font-size:13px}
+  .wrap{display:grid;grid-template-columns:380px 1fr;gap:16px;padding:16px;max-width:1200px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+  label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 10px;font:inherit}
+  textarea{resize:vertical;min-height:52px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  button{font:inherit;font-weight:650;border:none;border-radius:9px;padding:11px 14px;cursor:pointer;margin-top:14px;width:100%}
+  .dispatch{background:var(--accent);color:#001}
+  .dispatch:disabled{opacity:.5;cursor:default}
+  .result{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:14px;display:none}
+  .result.ok{display:block;background:#0c1a12;border:1px solid #1f5133;color:#9ff0bd}
+  .result.err{display:block;background:#2a1416;border:1px solid #5b2327;color:#ff9ea1}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #222b36}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .red{background:#3a1720;color:#ff9ea1}.blue{background:#16233f;color:#9db9ff}
+  .lamp{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:3px;background:#333}
+  .on-green{background:var(--green)}.on-amber{background:var(--amber)}.on-red{background:var(--red)}.on-flash{background:var(--red);animation:bl .6s steps(1) infinite}
+  @keyframes bl{50%{background:#333}}
+  .muted{color:var(--dim);font-size:12px}
+  #suggest{display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--panel);
+    border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;max-height:250px;overflow:auto;
+    box-shadow:0 10px 24px rgba(0,0,0,.45)}
+  .sug{padding:9px 11px;font-size:13px;cursor:pointer;border-top:1px solid #222b36;color:var(--ink)}
+  .sug:hover,.sug.active{background:var(--panel2)}
+  .sug .sm{color:var(--dim);font-size:11px}
+  .sugsrc{padding:5px 11px;font-size:10px;color:var(--dim);border-top:1px solid #222b36;background:#12181f}
+</style>
+</head>
+<body>
+  <header>
+    <h1>LifeLine — Call-taker Console</h1>
+    <span class="sub">Phone intake · operator enters the accident address</span>
+    <span class="sub" id="clock" style="margin-left:auto"></span>
+  </header>
+  <div id="mapstatus" style="display:none;padding:8px 22px;font-size:13px"></div>
+  <div class="wrap">
+    <div class="card">
+      <h3>New emergency (phone call)</h3>
+      <label>Accident address, place or business (or lat, lng)</label>
+      <div style="position:relative">
+        <input id="address" placeholder="Flosil Group  ·  Kilpauk Medical College  ·  or  13.0805, 80.2760" autofocus autocomplete="off"/>
+        <div id="suggest"></div>
+      </div>
+      <div id="resolved" style="margin-top:6px;font-size:12px;color:#7ee2a8;min-height:15px"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center">
+        <span style="font-size:11px;color:#8b98a5">Quick pick (offline):</span>
+        <button type="button" onclick="pick(13.0809,80.2757,'MMC / RGGGH (J1)')" style="width:auto;margin:0;padding:5px 9px;font-size:12px;background:#1c232d;color:#9fe0c4;border:1px solid #2b3543;border-radius:8px;cursor:pointer">MMC · J1</button>
+        <button type="button" onclick="pick(13.0827,80.2620,'Vepery junction (J2)')" style="width:auto;margin:0;padding:5px 9px;font-size:12px;background:#1c232d;color:#9fe0c4;border:1px solid #2b3543;border-radius:8px;cursor:pointer">Vepery · J2</button>
+        <button type="button" onclick="pick(13.0790,80.2445,'Kilpauk MC (J3)')" style="width:auto;margin:0;padding:5px 9px;font-size:12px;background:#1c232d;color:#9fe0c4;border:1px solid #2b3543;border-radius:8px;cursor:pointer">Kilpauk · J3</button>
+        <button type="button" onclick="pick(13.0809,80.2817,'Near MMC — accident')" style="width:auto;margin:0;padding:5px 9px;font-size:12px;background:#1c232d;color:#9fe0c4;border:1px solid #2b3543;border-radius:8px;cursor:pointer">Accident (E of J1)</button>
+        <button type="button" onclick="pick(13.0796,80.2415,'Kilpauk Medical College Hospital')" style="width:auto;margin:0;padding:5px 9px;font-size:12px;background:#1c232d;color:#9fe0c4;border:1px solid #2b3543;border-radius:8px;cursor:pointer">Kilpauk MCH</button>
+      </div>
+      <label>Details (what the caller reported)</label>
+      <textarea id="details" placeholder="e.g. two-wheeler accident, one person bleeding, conscious"></textarea>
+      <div class="row">
+        <div>
+          <label>Type</label>
+          <select id="type">
+            <option value="road_accident">Road accident</option>
+            <option value="medical">Medical</option>
+            <option value="fire">Fire (recorded only)</option>
+          </select>
+        </div>
+        <div>
+          <label>Priority</label>
+          <select id="priority">
+            <option value="code_red">Code Red — life-threatening</option>
+            <option value="code_blue">Code Blue — non-life-threatening</option>
+          </select>
+        </div>
+      </div>
+      <button class="dispatch" id="btn" onclick="dispatch()">Dispatch nearest ambulance</button>
+      <div class="result" id="result"></div>
+      <p class="muted">Start typing an address — it's found automatically (OpenStreetMap, needs internet) and shown below, or type <b>lat, lng</b> for a direct pin that works offline. The nearest available ambulance is assigned and its corridor authorized automatically.</p>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h3>Active incidents</h3>
+        <table><thead><tr><th>ID</th><th>Type</th><th>Pri</th><th>Unit</th><th>Status</th><th>Via</th></tr></thead>
+          <tbody id="incidents"><tr><td colspan="6" class="muted">none yet</td></tr></tbody></table>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h3>Units</h3>
+        <table><thead><tr><th>Unit</th><th>Status</th><th>Speed</th></tr></thead>
+          <tbody id="units"><tr><td colspan="3" class="muted">waiting for telemetry…</td></tr></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Junctions</h3>
+        <table><thead><tr><th>ID</th><th>Name</th><th>Signal (NS / EW)</th><th>Mode</th><th>Owner</th></tr></thead>
+          <tbody id="junctions"><tr><td colspan="5" class="muted">…</td></tr></tbody></table>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Hospital beds · verified <span id="bedsts" class="muted" style="font-weight:400;font-size:12px"></span></h3>
+        <table><thead><tr><th>Hospital</th><th>ED</th><th>Beds free</th><th>ICU</th></tr></thead>
+          <tbody id="hbeds"><tr><td colspan="4" class="muted">loading…</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+// Google Places autocomplete + geocoding (browser-side, uses the injected key).
+// Google calls this when the Maps JS API finishes loading.
+let picked = null;
+function showResolved(loc){
+  const el = $("resolved");
+  el.textContent = loc ? `📍 ${loc.label}  ·  ${Number(loc.lat).toFixed(5)}, ${Number(loc.lng).toFixed(5)}` : "";
+}
+// Preset corridor locations — baked coordinates, work with zero internet/API.
+function pick(lat, lng, label){
+  picked = { lat, lng, label };
+  $("address").value = label;
+  showResolved(picked);
+}
+window.pick = pick;
+function setMapStatus(msg, kind){
+  const el = $("mapstatus"); if(!el) return;
+  el.style.display = msg ? "block" : "none";
+  el.textContent = msg || "";
+  el.style.background = kind==="err" ? "#2a1416" : kind==="ok" ? "#0c1a12" : "#20242e";
+  el.style.color = kind==="err" ? "#ff9ea1" : kind==="ok" ? "#8ff0b5" : "#ffd28a";
+}
+// Server-injected Google Maps key (empty -> keyless fallback only).
+const MAPS_KEY = "{{MAPS_KEY}}";
+const HAS_KEY = MAPS_KEY && MAPS_KEY.indexOf("{{") !== 0 && MAPS_KEY.length > 12;
+// Restrict every suggestion to the Chennai metropolitan area (not worldwide).
+const CH = { s: 12.80, w: 79.95, n: 13.35, e: 80.40 };
+
+// PRIMARY: Google Places Autocomplete (New) — multiple suggestions INCLUDING
+// businesses (e.g. "Flosil Group"). Browser fetch with the key; requires
+// "Places API (New)" enabled on the key.
+async function gAutocomplete(q){
+  if (!HAS_KEY) throw new Error("no key");
+  const r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+    method: "POST", headers: {"Content-Type":"application/json", "X-Goog-Api-Key": MAPS_KEY},
+    body: JSON.stringify({ input: q,
+      locationRestriction: { rectangle: { low: {latitude:CH.s, longitude:CH.w},
+                                          high: {latitude:CH.n, longitude:CH.e} } } }) });
+  if (!r.ok) throw new Error("places autocomplete " + r.status);
+  const d = await r.json();
+  return (d.suggestions || []).map(s => s.placePrediction).filter(Boolean).map(p => {
+    const sf = p.structuredFormat || {};
+    return { placeId: p.placeId,
+             label: (sf.mainText && sf.mainText.text) || (p.text && p.text.text) || "",
+             sub: (sf.secondaryText && sf.secondaryText.text) || "" };
+  }).filter(x => x.label);
+}
+async function gPlaceLatLng(placeId, label){
+  const r = await fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(placeId),
+    { headers: {"X-Goog-Api-Key": MAPS_KEY, "X-Goog-FieldMask": "location,displayName,formattedAddress"} });
+  if (!r.ok) throw new Error("place details " + r.status);
+  const d = await r.json(); const loc = d.location || {};
+  return { lat: loc.latitude, lng: loc.longitude,
+           label: label || (d.displayName && d.displayName.text) || d.formattedAddress || "location" };
+}
+
+// FALLBACK: Photon (OpenStreetMap) — keyless, multiple results. Good for
+// streets/areas/landmarks; usually not specific businesses.
+async function photonMany(q){
+  const url = "https://photon.komoot.io/api/?" + new URLSearchParams(
+    { q, limit: "12", lat: "13.08", lon: "80.27", lang: "en",
+      bbox: `${CH.w},${CH.s},${CH.e},${CH.n}` });   // bbox restricts to Chennai
+  const r = await fetch(url); const d = await r.json();
+  return (d.features || []).map(f => {
+    const c = f.geometry.coordinates, p = f.properties || {};
+    return { lat: c[1], lng: c[0],
+             label: [p.name, p.street].filter(Boolean).join(", ") || p.name || q,
+             sub: [p.district, p.city, p.state].filter(Boolean).join(", ") };
+  }).filter(x => x.lat != null &&                    // drop anything outside Chennai
+             x.lat >= CH.s && x.lat <= CH.n && x.lng >= CH.w && x.lng <= CH.e)
+    .slice(0, 6);
+}
+setMapStatus(HAS_KEY ? "Address search ready (Google Places) — start typing."
+                     : "Address search ready (OpenStreetMap) — start typing.", "ok");
+setTimeout(() => setMapStatus("", ""), 2500);
+
+// Resolve typed text -> {lat,lng,label}. Order: autocomplete pick, typed lat/lng,
+// Google geocode. Returns null so the SERVER can try (Nominatim) as a last resort.
+async function resolveLatLng(text){
+  const m = text.split(",").map(s => parseFloat(s.trim()));
+  if (m.length === 2 && m.every(Number.isFinite)) return { lat:m[0], lng:m[1], label:text };
+  if (picked && text === picked.label) return picked;
+  try { const g = await gAutocomplete(text); if (g[0]) return await gPlaceLatLng(g[0].placeId, g[0].label); } catch(e){}
+  try { const p = await photonMany(text); if (p[0]) return p[0]; } catch(e){}
+  return null;  // else the server geocodes (Nominatim)
+}
+
+async function dispatch(){
+  const typed = $("address").value.trim();
+  const result = $("result");
+  if(!typed){ result.className="result err"; result.textContent="Enter an address or lat, lng."; return; }
+  $("btn").disabled = true;
+  try{
+    const loc = await resolveLatLng(typed);
+    const address = loc ? `${loc.lat}, ${loc.lng}` : typed;   // coords resolve offline server-side
+    const details = (loc && loc.label && loc.label !== typed ? loc.label + " — " : "") + $("details").value;
+    const r = await fetch("/intake/call", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({address, text: details, type:$("type").value, priority:$("priority").value})});
+    const d = await r.json();
+    if(d.accepted){
+      result.className="result ok";
+      result.textContent = `✓ ${d.unit} dispatched — incident ${d.incident.id}` + (loc && loc.label ? ` at ${loc.label}` : "");
+      $("address").value=""; $("details").value=""; picked=null; showResolved(null);
+    } else {
+      result.className="result err";
+      result.textContent = "✗ " + (d.error || "could not dispatch");
+    }
+  }catch(e){ result.className="result err"; result.textContent="✗ error: "+e; }
+  $("btn").disabled = false;
+}
+
+const lampDot = c => `<span class="lamp ${c==='green'?'on-green':c==='amber'?'on-amber':c==='red'?'on-red':c==='flash'?'on-flash':''}"></span>`;
+function esc(s){ return String(s==null?"":s).replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+async function poll(){
+  try{
+    const s = await (await fetch("/state")).json();
+    const inc = s.incidents||[];
+    $("incidents").innerHTML = inc.length ? inc.map(i=>`<tr>
+      <td>${esc(i.id)}</td><td>${esc(i.type)}</td>
+      <td><span class="pill ${i.priority==='code_red'?'red':'blue'}">${i.priority==='code_red'?'RED':'BLUE'}</span></td>
+      <td>${esc(i.unit||'—')}</td><td>${esc(i.status)}</td><td>${esc(i.via)}</td></tr>`).join("")
+      : '<tr><td colspan="6" class="muted">none yet</td></tr>';
+    const u = s.ambulances||[];
+    $("units").innerHTML = u.length ? u.map(a=>`<tr>
+      <td>${esc(a.id)}</td><td>${a.active?'<b style="color:var(--green)">on trip</b>':(a.stale?'<span class="muted">stale</span>':'available')}</td>
+      <td>${esc(a.speed_kph)} kph</td></tr>`).join("")
+      : '<tr><td colspan="3" class="muted">waiting for telemetry…</td></tr>';
+    $("junctions").innerHTML = (s.junctions||[]).map(j=>`<tr>
+      <td>${esc(j.id)}</td><td>${esc(j.name)}</td>
+      <td>${lampDot(j.lamps.ns)}${lampDot(j.lamps.ew)}</td>
+      <td>${esc(j.mode)}</td><td>${esc(j.owner||'—')}</td></tr>`).join("");
+  }catch(e){ /* server not up yet */ }
+  $("clock").textContent = new Date().toLocaleTimeString();
+}
+setInterval(poll, 1000); poll();
+
+// Verified-hospital bed availability (from the hospital consoles). Capacity first:
+// ED-open with beds free, then open, then closed. Read-only situational awareness.
+async function pollBeds(){
+  try{
+    const d = await (await fetch("/hospitals")).json();
+    const hs = (d.hospitals||[]);
+    const rank = h => { const b=h.beds||{}; if(b.ed_open===false) return 2; return (b.beds_available>0)?0:1; };
+    hs.sort((a,b)=> rank(a)-rank(b) || (a.name<b.name?-1:1));
+    let reported=0;
+    $("hbeds").innerHTML = hs.map(h=>{
+      const b=h.beds||{}; const open=b.ed_open!==false; if(b.updated) reported++;
+      const free=(b.beds_available==null)?'—':b.beds_available;
+      const icu=(b.icu_available==null)?'—':b.icu_available;
+      const rep=b.updated?'':' <span class="muted" style="font-size:11px">· not reported</span>';
+      const pill='padding:3px 8px;border-radius:999px;font-weight:700;font-size:11px;'+(open?'background:rgba(34,197,94,.15);color:#7ee2a8':'background:rgba(239,68,68,.15);color:#ffb4b4');
+      return `<tr><td>${esc(h.name)}${rep}</td>
+        <td><span style="${pill}">${open?'OPEN':'CLOSED'}</span></td>
+        <td>${free}${b.beds_total!=null?(' / '+b.beds_total):''}</td><td>${icu}</td></tr>`;
+    }).join("") || '<tr><td colspan="4" class="muted">no hospitals</td></tr>';
+    $("bedsts").textContent = reported ? (reported+' reporting') : '';
+  }catch(e){}
+}
+setInterval(pollBeds, 5000); pollBeds();
+
+// Autocomplete dropdown: multiple suggestions (Google Places -> OSM fallback),
+// click to select. A typed "lat, lng" is taken as a direct pin (works offline).
+let _geoTimer = null, _sugItems = [];
+function hideSuggest(){ const b=$("suggest"); if(b){ b.style.display="none"; b.innerHTML=""; } _sugItems=[]; }
+function renderSuggest(items, src){
+  const b=$("suggest");
+  if(!items || !items.length){ hideSuggest(); return; }
+  _sugItems = items;
+  b.innerHTML = items.map((it,i)=>`<div class="sug" data-i="${i}">${esc(it.label)}${it.sub?` <span class="sm">· ${esc(it.sub)}</span>`:""}</div>`).join("")
+    + `<div class="sugsrc">${src==='g'?'Google Places':'OpenStreetMap'} · click to select</div>`;
+  b.style.display="block";
+}
+async function chooseSuggest(i){
+  const it=_sugItems[i]; if(!it) return; hideSuggest();
+  let loc = it;
+  if(it.placeId){ try{ loc = await gPlaceLatLng(it.placeId, it.label); }catch(e){ setMapStatus("Couldn't fetch that place — try another.", "err"); setTimeout(()=>setMapStatus("",""),2500); return; } }
+  picked = { lat:loc.lat, lng:loc.lng, label:loc.label };
+  $("address").value = loc.label; showResolved(picked);
+}
+$("suggest").addEventListener("mousedown", (e)=>{           // mousedown fires before input blur
+  const el=e.target.closest(".sug"); if(el){ e.preventDefault(); chooseSuggest(Number(el.dataset.i)); }
+});
+$("address").addEventListener("input", () => {
+  const v = $("address").value.trim();
+  const m = v.split(",").map(s => parseFloat(s.trim()));
+  if (m.length === 2 && m.every(Number.isFinite)) { picked = { lat:m[0], lng:m[1], label:"map pin" }; showResolved(picked); hideSuggest(); return; }
+  picked = null; showResolved(null);
+  clearTimeout(_geoTimer);
+  if (v.length < 3) { hideSuggest(); return; }
+  _geoTimer = setTimeout(async () => {
+    if ($("address").value.trim() !== v) return;
+    let items=null, src='g';
+    try { items = await gAutocomplete(v); } catch(e){ items=null; }
+    if (!items || !items.length){ src='o'; try { items = await photonMany(v); } catch(e){ items=null; } }
+    if ($("address").value.trim() === v) renderSuggest(items, src);
+  }, 300);
+});
+$("address").addEventListener("blur", () => setTimeout(hideSuggest, 150));
+</script>
+</body>
+</html>

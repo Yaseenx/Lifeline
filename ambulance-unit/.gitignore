@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+agent/.env
+
+# Node / dashboard
+node_modules/
+dashboard/dist/
+dashboard/.env
+.DS_Store

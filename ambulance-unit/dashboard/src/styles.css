@@ -1,0 +1,335 @@
+:root {
+  --bg: #0b1622;
+  --panel: rgba(16, 28, 42, 0.92);
+  --panel-edge: #21364a;
+  --text: #eaf1f8;
+  --muted: #9fb2c4;
+  --accent: #2e6cff;
+  --ok: #1faa59;
+  --bad: #e23b3b;
+  --warn: #e8a33d;
+  --sos: #e23b3b;
+  --sos-on: #b21f1f;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); overflow: hidden; }
+
+.app { position: relative; height: 100vh; width: 100vw; }
+.map { position: absolute; inset: 0; height: 100%; width: 100%; background: #0b1622; }
+.map-missing-key {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 24px; color: var(--muted); font-size: 16px; line-height: 1.6;
+}
+.map-missing-key code { color: var(--text); background: #0e1d2c; padding: 1px 6px; border-radius: 6px; }
+
+/* ambulance heading arrow */
+.amb-arrow {
+  width: 0; height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 24px solid var(--accent);
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
+}
+
+/* corridor node dot (AdvancedMarker content) */
+.node-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #0b1622;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+/* upcoming traffic-signal marker */
+.signal-dot {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; font-size: 13px;
+  border: 2px solid #0b1622; box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+}
+
+/* destination hospital pin (AdvancedMarker content) */
+.dest-pin {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--bad); color: #fff; font-weight: 800; font-size: 15px;
+  border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* status bar — top left */
+.status-bar {
+  position: absolute; top: 12px; left: 12px; z-index: 500;
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+  font-size: 15px; color: var(--muted);
+}
+.status-bar .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--bad); }
+.status-bar .dot.ok { background: var(--ok); }
+.status-bar .lbl { margin-right: 8px; }
+.status-bar .speed { margin-left: 10px; font-size: 26px; font-weight: 700; color: var(--text); }
+.status-bar .speed small { font-size: 12px; color: var(--muted); margin-left: 3px; }
+.status-bar .advisory {
+  margin-left: 10px; padding: 5px 10px; border-radius: 8px;
+  background: #18324d; color: #bcd4ee; font-weight: 600;
+}
+.status-bar .advisory.over { background: var(--warn); color: #20140a; }
+
+/* patient code banner — top center */
+.code-banner {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 620;
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 22px; border-radius: 12px;
+  font-size: 20px; font-weight: 800; letter-spacing: 0.3px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); color: #fff;
+}
+.code-banner.red { background: #d61f1f; }
+.code-banner.blue { background: #1f6fe0; }
+.code-banner.routine { background: #0e7a5f; }
+.code-banner.pending { background: #8a6d1d; }
+.code-banner .cb-leg {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.4px;
+  padding: 4px 9px; border-radius: 7px; background: rgba(255, 255, 255, 0.18);
+}
+.code-banner .cb-eta {
+  font-size: 15px; font-weight: 600; padding-left: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
+}
+.code-banner .cb-eta b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* hazard banner — top center, below the code banner */
+.hazard-banner {
+  position: absolute; top: 74px; left: 50%; transform: translateX(-50%); z-index: 600;
+  padding: 14px 22px; border-radius: 12px; font-size: 18px; cursor: pointer;
+  background: var(--warn); color: #1a1206; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  max-width: 60vw;
+}
+.hazard-banner.critical { background: var(--bad); color: #fff; animation: flash 1s infinite; }
+.hazard-banner .tap { opacity: 0.7; font-size: 13px; margin-left: 10px; }
+@keyframes flash { 50% { opacity: 0.6; } }
+
+/* corridor panel — top right */
+.corridor-panel {
+  position: absolute; top: 12px; right: 12px; z-index: 500; width: 272px;
+  padding: 14px 16px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.corridor-panel.idle { color: var(--muted); }
+.corridor-panel .c-head { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+.corridor-panel .c-dest { color: var(--text); margin-bottom: 6px; font-size: 15px; }
+.corridor-panel .c-queue { color: var(--muted); margin-bottom: 8px; }
+
+/* explicit grant banner (MON-8/SEC-10): only 'granted' ever shows green */
+.c-grant {
+  padding: 9px 10px; border-radius: 10px; margin-bottom: 8px; text-align: center;
+  font-weight: 800; font-size: 14px; letter-spacing: 0.3px;
+}
+.c-grant .c-grant-node { font-weight: 600; opacity: 0.85; }
+.c-grant.granted { background: rgba(31, 170, 89, 0.18); color: #7ee2a8; border: 1px solid var(--ok); }
+.c-grant.wait { background: rgba(232, 163, 61, 0.15); color: #ffd28a; border: 1px solid var(--warn); }
+.c-grant.rejected { background: rgba(226, 59, 59, 0.14); color: #ffb4b4; border: 1px solid var(--bad); }
+
+.c-metrics { display: flex; gap: 10px; margin: 8px 0; }
+.c-metric {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border-radius: 10px; background: #0e1d2c;
+}
+.c-metric .c-mlabel { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
+.c-metric .c-mval { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+.c-sub { font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); margin: 6px 0 2px; }
+.c-nodes { list-style: none; margin: 0; padding: 0; }
+.c-nodes li {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 0; border-top: 1px solid var(--panel-edge);
+}
+.c-nodes .c-name { flex: 1; font-size: 15px; }
+.c-green-in { font-size: 12px; color: var(--warn); font-weight: 700; }
+.c-green-in.now { color: var(--ok); }
+.c-nodes .c-eta { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip { width: 12px; height: 12px; border-radius: 3px; background: #8aa0b6; }
+.chip.green { background: var(--ok); }
+.chip.granted { background: var(--ok); box-shadow: 0 0 0 2px rgba(31, 170, 89, 0.35); }
+.chip.red { background: var(--bad); }
+.chip.requested { background: var(--warn); }
+.chip.queued { background: var(--warn); }
+.chip.rejected { background: #5a6b7d; border: 1px solid var(--bad); }
+.chip.passed { background: #5a6b7d; }
+
+/* trip timer — right side */
+.trip-timer {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 500;
+  min-width: 150px; text-align: center;
+  padding: 14px 18px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.trip-timer .tt-label {
+  font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted);
+}
+.trip-timer .tt-time {
+  font-size: 40px; font-weight: 800; line-height: 1.1; margin-top: 4px;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.trip-timer.running .tt-time { color: var(--ok); }
+.trip-timer.running { border-color: var(--ok); }
+.trip-timer.stopped .tt-time { color: var(--muted); }
+
+/* SOS panel — bottom left */
+.sos-panel {
+  position: absolute; left: 12px; bottom: 12px; z-index: 500; width: 330px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.sos-btn {
+  font-size: 22px; font-weight: 800; letter-spacing: 0.3px;
+  padding: 22px; border: none; border-radius: 14px;
+  background: var(--sos); color: #fff; cursor: pointer;
+}
+.sos-btn.on { background: var(--sos-on); animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(226, 59, 59, 0.25); } }
+
+/* trip-type chooser (idle) */
+.chooser-row { display: flex; gap: 8px; }
+.chooser-btn {
+  flex: 1; font-size: 14px; font-weight: 700; padding: 13px 8px; cursor: pointer;
+  border-radius: 12px; border: 1px solid var(--panel-edge);
+  background: #0e1d2c; color: var(--text);
+}
+.chooser-btn.house { border-color: var(--warn); color: #ffd28a; }
+.chooser-btn.transfer { border-color: var(--panel-edge); color: var(--muted); }
+.chooser-btn:hover { background: #16283a; }
+
+/* active-trip header */
+.trip-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 800; letter-spacing: 0.3px;
+  padding: 10px 12px; border-radius: 10px;
+}
+.trip-head.emergency { background: rgba(226, 59, 59, 0.16); color: #ffb4b4; border: 1px solid var(--bad); }
+.trip-head.routine { background: rgba(31, 170, 89, 0.14); color: #7ee2a8; border: 1px solid #0e7a5f; }
+.trip-head .trip-leg { font-size: 12px; font-weight: 700; color: inherit; opacity: 0.85; }
+.trip-origin { font-size: 13px; color: var(--muted); }
+
+/* patient-condition buttons (Red SOS / Blue SOS / Escalate) */
+.cond-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.cond-btn {
+  font-size: 15px; font-weight: 800; padding: 13px 14px; cursor: pointer;
+  border-radius: 12px; text-align: left; transition: background .12s, color .12s, border-color .12s;
+}
+.cond-btn.red { border: 1px solid var(--bad); background: rgba(226, 59, 59, 0.12); color: #ffb4b4; }
+.cond-btn.red.active { background: var(--bad); color: #fff; box-shadow: 0 0 0 2px rgba(226, 59, 59, 0.35); }
+.cond-btn.blue { border: 1px solid #2e6cff; background: rgba(46, 108, 255, 0.12); color: #b7c9ff; }
+.cond-btn.blue.active { background: #2e6cff; color: #fff; box-shadow: 0 0 0 2px rgba(46, 108, 255, 0.35); }
+.cond-btn.escalate {
+  border: 1px solid var(--warn); background: rgba(232, 163, 61, 0.12); color: #ffd28a;
+  font-size: 14px; font-weight: 700;
+}
+.cond-btn.escalate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* selected-hospital bed availability line (from the hospital consoles) */
+.dest-beds { display: block; font-size: 12.5px; font-weight: 700; margin-top: 6px; padding: 6px 10px; border-radius: 8px; }
+.dest-beds.open { background: rgba(31,170,89,0.14); color: #7ee2b0; border: 1px solid rgba(31,170,89,0.4); }
+.dest-beds.closed { background: rgba(226,59,59,0.14); color: #ffb4b4; border: 1px solid rgba(226,59,59,0.45); }
+
+/* trip action buttons */
+.onboard-btn {
+  font-size: 16px; font-weight: 800; padding: 14px; cursor: pointer;
+  border: none; border-radius: 12px; background: var(--ok); color: #06281a;
+}
+.trip-actions { display: flex; gap: 8px; }
+.escalate-btn {
+  flex: 1; font-size: 14px; font-weight: 800; padding: 12px 8px; cursor: pointer;
+  border-radius: 10px; border: 1px solid var(--bad);
+  background: rgba(226, 59, 59, 0.14); color: #ffb4b4;
+}
+.deescalate-btn {
+  flex: 1; font-size: 13px; font-weight: 700; padding: 12px 8px; cursor: pointer;
+  border-radius: 10px; border: 1px solid var(--warn);
+  background: rgba(232, 163, 61, 0.12); color: #ffd28a;
+}
+.start-routine-btn {
+  flex: 1; font-size: 14px; font-weight: 800; padding: 12px 8px; cursor: pointer;
+  border-radius: 10px; border: 1px solid #0e7a5f;
+  background: rgba(31, 170, 89, 0.14); color: #7ee2a8;
+}
+.end-btn {
+  font-size: 13px; padding: 12px 14px; cursor: pointer;
+  border-radius: 10px; border: 1px solid var(--panel-edge);
+  background: #0e1d2c; color: var(--muted);
+}
+.field.toggle { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.field.toggle input { width: 18px; height: 18px; }
+.field input[type="text"] {
+  font-size: 15px; padding: 11px; border-radius: 10px;
+  background: #0e1d2c; color: var(--text); border: 1px solid var(--panel-edge);
+}
+.field { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 5px; }
+.field select {
+  font-size: 17px; padding: 12px; border-radius: 10px;
+  background: #0e1d2c; color: var(--text); border: 1px solid var(--panel-edge);
+}
+
+/* nearest-hospital suggestion above the destination picker */
+.nearest-pop {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin: 2px 0 8px; padding: 9px 11px; cursor: pointer; text-align: left;
+  border-radius: 10px; border: 1px solid var(--accent);
+  background: rgba(46, 108, 255, 0.14); color: var(--text); font-size: 13px;
+}
+.nearest-pop:hover { background: rgba(46, 108, 255, 0.26); }
+.nearest-pop .np-pin { font-size: 14px; }
+.nearest-pop .np-text { flex: 1; color: var(--muted); }
+.nearest-pop .np-text b { color: var(--text); font-weight: 700; }
+.nearest-pop .np-use {
+  padding: 3px 9px; border-radius: 7px; font-weight: 700; font-size: 12px;
+  background: var(--accent); color: #fff;
+}
+.nearest-pop .np-tag {
+  padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 700;
+  background: #18324d; color: #bcd4ee; white-space: nowrap;
+}
+.nearest-pop .np-tag.verified { background: rgba(31, 170, 89, 0.18); color: #7ee2a8; }
+.live-note { font-size: 12px; color: var(--muted); }
+.hint { font-size: 13px; color: var(--warn); }
+
+.link-warn {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 700;
+  background: #2a1414; color: #ffd7d7; padding: 10px 18px; border-radius: 10px; font-size: 15px;
+}
+
+/* simulator controls — bottom right (dev/test only) */
+.dev-panel {
+  position: absolute; right: 12px; bottom: 12px; z-index: 650; width: 230px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.dev-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.6px; color: var(--warn);
+}
+.dev-head .dev-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--warn);
+  animation: pulse 1.6s infinite;
+}
+.dev-hint { font-size: 12px; color: var(--muted); margin: 8px 0 10px; line-height: 1.5; }
+.dev-row { display: flex; gap: 8px; margin-top: 8px; }
+.dev-row button {
+  flex: 1; font-size: 13px; padding: 9px; cursor: pointer;
+  border-radius: 9px; border: 1px solid var(--panel-edge);
+  background: #0e1d2c; color: var(--text);
+}
+.dev-row button:hover { border-color: var(--accent); }
+
+/* live GPS status chip — bottom right */
+.live-badge {
+  position: absolute; right: 12px; bottom: 12px; z-index: 650; width: 230px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.live-badge .lb-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.6px; color: var(--text);
+}
+.live-badge .lb-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+.live-badge .lb-dot.ok { background: var(--ok); }
+.live-badge .lb-msg { font-size: 12px; color: var(--muted); margin: 8px 0 0; line-height: 1.5; }
+.live-badge .lb-msg.err { color: #ffb4b4; }

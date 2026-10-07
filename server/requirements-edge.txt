@@ -1,0 +1,6 @@
+# Raspberry Pi edge signal node (edge_signal.py). Install on each junction Pi:
+websockets>=12.0
+gpiozero>=2.0
+# gpiozero needs a pin backend on the Pi (usually preinstalled):
+#   lgpio>=0.2      # Pi 5 / recent Raspberry Pi OS
+# Off-Pi (no GPIO), edge_signal.py runs in log-only mode with no extra backend.

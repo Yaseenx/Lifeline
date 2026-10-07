@@ -1,0 +1,42 @@
+# LifeLine corridor server — topology + timings.
+# Pilot corridor: EVR Periyar Salai, MMC -> Vepery -> Kilpauk (all Mode B /
+# standalone; CITS deferred).
+# J1/J3 snapped to the geocoded hospital locations (match hospitals.ts registry);
+# J2 (Vepery) from OpenStreetMap — replace all three with surveyed junction
+# stop-line coordinates before deployment.
+corridor:
+  junctions:
+    - id: J1
+      name: MMC / RGGGH junction
+      lat: 13.0814162
+      lng: 80.2775787
+      corridor_dir: EW        # the corridor movement axis at this junction
+    - id: J2
+      name: Vepery junction
+      lat: 13.0836000
+      lng: 80.2607000
+      corridor_dir: EW
+    - id: J3
+      name: Kilpauk MC junction
+      lat: 13.0783427
+      lng: 80.2438901
+      corridor_dir: EW
+
+timings:
+  green_s: 9.0
+  amber_s: 2.0
+  allred_s: 1.5
+  min_green_s: 4.0
+  max_hold_s: 90.0          # FSM-8: no open-ended greens, ever
+  lead_m: 450.0             # request preemption inside this distance
+  pass_m: 60.0              # past the junction and moving away -> release
+  lease_ttl_ms: 1500        # no renewal within this -> auto revert (fail-safe)
+  tick_ms: 100              # 10 Hz authoritative engine
+
+security:
+  freshness_window_s: 5.0
+  # Per-device HMAC secrets. PROVISION A UNIQUE RANDOM SECRET PER VEHICLE:
+  #   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+  # In production, load these from an env/secret store, do NOT commit them.
+  devices:
+    AMB-CHN-001: lrJ89sFVv6P9dPiYm-9SOfxv8MsqfSiQLtJsOeFAN7c
